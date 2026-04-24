@@ -1,0 +1,50 @@
+body{
+    background: #2c2c2c;
+}
+
+aside{
+    float: left;
+    background: #181818;
+    width: 14%;
+    padding: 1%;
+    height: 100vh;
+    color: #fff;
+    border-right: 5px solid #4d4d4d;
+}
+
+aside h4{
+    margin-top: 15%;
+    font-size: 28px;
+}
+aside ul{list-style: none}
+aside ul a {text-decoration: none}
+aside ul li {
+    color: #fff;
+    display: block;
+    margin-top: 20px;
+    transition: all 0.2s ease;
+}
+
+aside ul li:hover,aside ul a:hover {
+    color: #eb5959;
+    text-decoration: none;
+    transform: scale(1.05);
+}
+
+h1{
+    font-weight: bold;
+    float : left;
+    color: #fff;
+    text-align: center;
+    width: 75%
+}
+
+schedule .features{
+    float : left;
+    color: #fff;
+    margin-top: 100px;
+    text-align: center;
+    width: 75%
+}
+
+schedule .features h1{font-size: 50px}

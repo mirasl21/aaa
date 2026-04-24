@@ -1,0 +1,163 @@
+{% extends 'schedule/base.html' %}
+{% block title %}Schedule — LessonFlow{% endblock %}
+{% block extra_css %}
+<style>
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .cal-nav { display: flex; align-items: center; gap: 10px; }
+  .cal-nav a { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid var(--border2); border-radius: var(--radius); color: var(--text2); text-decoration: none; font-size: 16px; transition: all 0.15s; }
+  .cal-nav a:hover { background: var(--surface); color: var(--text); }
+  .cal-title { font-size: 15px; font-weight: 600; color: var(--text); min-width: 200px; text-align: center; }
+
+  .cal-grid { display: grid; grid-template-columns: 52px repeat(7, 1fr); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg2); }
+  .cal-col-header { background: var(--surface); padding: 10px 6px; text-align: center; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .cal-col-header .day-name { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; }
+  .cal-col-header .day-num { font-size: 20px; font-weight: 600; margin-top: 2px; color: var(--text); }
+  .cal-col-header .day-num.today-num { color: var(--accent); }
+  .time-gutter { grid-column: 1; display: contents; }
+  .time-label { background: var(--bg2); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px 6px 0; text-align: right; font-size: 10px; color: var(--text3); font-weight: 500; }
+  .cal-cell { position: relative; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); min-height: 48px; cursor: pointer; transition: background 0.1s; }
+  .cal-cell:hover { background: rgba(255,255,255,0.02); }
+  .cal-cell:last-child { border-right: none; }
+  .lesson-block { position: absolute; left: 2px; right: 2px; border-radius: 5px; padding: 4px 6px; font-size: 11px; font-weight: 500; cursor: pointer; overflow: hidden; z-index: 2; color: #fff; border: none; text-align: left; line-height: 1.3; transition: opacity 0.15s; }
+  .lesson-block:hover { opacity: 0.85; }
+  .lesson-block .lb-time { font-size: 10px; opacity: 0.8; margin-top: 1px; }
+  .corner-cell { background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="cal-header">
+  <div class="cal-nav">
+    <a href="?week={{ week_offset|add:'-1' }}">&#8249;</a>
+    <span class="cal-title">
+      {{ week_start|date:"M j" }} – {{ week_end|date:"M j, Y" }}
+    </span>
+    <a href="?week={{ week_offset|add:'1' }}">&#8250;</a>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    {% if week_offset != 0 %}
+    <a href="?" class="btn btn-sm">Today</a>
+    {% endif %}
+    {% if user.is_teacher %}
+    <a href="{% url 'lesson_create' %}" class="btn btn-primary btn-sm">+ New Lesson</a>
+    {% endif %}
+  </div>
+</div>
+
+{% with hours="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23" %}
+<div class="cal-grid" id="cal-grid">
+  <!-- Corner + Day headers -->
+  <div class="corner-cell"></div>
+  {% for day in days %}
+  <div class="cal-col-header" style="{% if day == today %}border-bottom:2px solid var(--accent);{% endif %}">
+    <div class="day-name">{{ day|date:"D" }}</div>
+    <div class="day-num {% if day == today %}today-num{% endif %}">{{ day|date:"j" }}</div>
+  </div>
+  {% endfor %}
+
+    <!-- Hour rows -->
+  {% for topic in lesson.topics %}
+    <p>{{ topic }}</p>
+{% endfor %}
+  <div class="time-label">
+    {% if h != "0" %}
+    {{ h }}:00
+    {% endif %}
+  </div>
+  {% for day in days %}
+  <div class="cal-cell" data-date="{{ day|date:'Y-m-d' }}" data-hour="{{ h }}"
+    {% if user.is_teacher %}onclick="handleCellClick('{{ day|date:'Y-m-d' }}', {{ h }})"{% endif %}>
+  </div>
+  {% endfor %}
+  {% endfor %}
+</div>
+{% endwith %}
+
+
+<div class="legend" id="legend"></div>
+
+<script>
+const LESSONS = {{ lessons_json|safe }};
+const CELL_HEIGHT = 48;
+
+function timeToY(isoStr) {
+  const d = new Date(isoStr);
+  const h = d.getHours() + d.getMinutes() / 60;
+  return h * CELL_HEIGHT;
+}
+
+function placeLessons() {
+  const grid = document.getElementById('cal-grid');
+  // map date -> col index (1-based, after gutter)
+  const cols = {};
+  document.querySelectorAll('.cal-col-header').forEach((el, i) => {
+    const dateEl = el.querySelector('.day-num');
+    // We stored date on cells; find a cell in this column
+  });
+
+  // Use cells' data-date to build column map
+  const dateCols = {};
+  document.querySelectorAll('.cal-cell').forEach(cell => {
+    const date = cell.dataset.date;
+    if (!dateCols[date]) dateCols[date] = cell;
+  });
+
+  // Get grid bounding
+  const gridRect = grid.getBoundingClientRect();
+  const gridStyle = window.getComputedStyle(grid);
+  const colCount = 8; // gutter + 7 days
+
+  // Find cells for row 0 (first content row after headers) to get column widths
+  const firstCells = {};
+  document.querySelectorAll('.cal-cell[data-hour="0"]').forEach(cell => {
+    firstCells[cell.dataset.date] = cell;
+  });
+
+  // Place each lesson
+  const subjects = {};
+  LESSONS.forEach(lesson => {
+    const start = new Date(lesson.start);
+    const end = new Date(lesson.end);
+    const dateStr = start.toISOString().slice(0, 10);
+    const cell = firstCells[dateStr];
+    if (!cell) return;
+
+    const cellRect = cell.getBoundingClientRect();
+    const colLeft = cellRect.left - gridRect.left;
+    const colWidth = cellRect.width;
+
+    const startH = start.getHours() + start.getMinutes() / 60;
+    const endH = end.getHours() + end.getMinutes() / 60;
+    const top = startH * CELL_HEIGHT + 44; // 44 = header height
+    const height = Math.max((endH - startH) * CELL_HEIGHT - 3, 20);
+
+    const block = document.createElement('button');
+    block.className = 'lesson-block';
+    block.style.cssText = `top:${top}px;height:${height}px;left:${colLeft + 2}px;width:${colWidth - 4}px;background:${lesson.color};position:absolute;`;
+    block.innerHTML = `<div>${lesson.title}</div><div class="lb-time">${start.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}–${end.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>`;
+    block.onclick = (e) => { e.stopPropagation(); window.location.href = '/lessons/' + lesson.id + '/'; };
+    grid.style.position = 'relative';
+    grid.appendChild(block);
+
+    if (lesson.subject && !subjects[lesson.subject]) {
+      subjects[lesson.subject] = lesson.color;
+    }
+  });
+
+  // Legend
+  const legend = document.getElementById('legend');
+  Object.entries(subjects).forEach(([name, color]) => {
+    legend.innerHTML += `<div class="legend-item"><span style="width:10px;height:10px;background:${color};border-radius:50%;display:inline-block;"></span>${name}</div>`;
+  });
+}
+
+function handleCellClick(date, hour) {
+  const dt = date + 'T' + String(hour).padStart(2,'0') + ':00';
+  window.location.href = '/lessons/new/?date=' + date;
+}
+
+document.addEventListener('DOMContentLoaded', placeLessons);
+</script>
+{% endblock %}
