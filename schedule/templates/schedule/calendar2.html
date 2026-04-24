@@ -170,24 +170,68 @@ body {
   color: var(--text-muted);
 }
 .sb-dot { width: 9px; height: 9px; border-radius: 50%; background: #4285f4; flex-shrink: 0; }
-.cal-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
-.day-headers.week-shift-prev,
-.grid-scroll.week-shift-prev {
-  animation: weekShiftPrev 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+.cal-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+  touch-action: pan-y;
+  --week-swipe-x: 0px;
+  --week-swipe-opacity: 1;
 }
-.day-headers.week-shift-next,
-.grid-scroll.week-shift-next {
-  animation: weekShiftNext 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+.cal-area.week-swipe .day-headers,
+.cal-area.week-swipe .grid-scroll {
+  transform: translateX(var(--week-swipe-x));
+  opacity: var(--week-swipe-opacity);
+  transition: none;
 }
-@keyframes weekShiftPrev {
-  from { opacity: 0.18; transform: translateX(-16px); }
-  55% { opacity: 0.72; }
+.cal-area.week-enter-next .day-headers,
+.cal-area.week-enter-next .grid-scroll {
+  animation: weekEnterNext 0.72s cubic-bezier(0.2, 0.95, 0.22, 1) both;
+}
+.cal-area.week-enter-prev .day-headers,
+.cal-area.week-enter-prev .grid-scroll {
+  animation: weekEnterPrev 0.72s cubic-bezier(0.2, 0.95, 0.22, 1) both;
+}
+.week-transition-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.week-transition-overlay .day-headers,
+.week-transition-overlay .grid-scroll {
+  transform: none !important;
+  opacity: 1 !important;
+}
+.week-transition-overlay.week-exit-next.animate {
+  animation: weekExitNext 0.72s cubic-bezier(0.2, 0.95, 0.22, 1) both;
+}
+.week-transition-overlay.week-exit-prev.animate {
+  animation: weekExitPrev 0.72s cubic-bezier(0.2, 0.95, 0.22, 1) both;
+}
+@keyframes weekEnterNext {
+  from { opacity: 0.18; transform: translateX(60px); }
+  55% { opacity: 0.74; }
   to { opacity: 1; transform: translateX(0); }
 }
-@keyframes weekShiftNext {
-  from { opacity: 0.18; transform: translateX(16px); }
-  55% { opacity: 0.72; }
+@keyframes weekEnterPrev {
+  from { opacity: 0.18; transform: translateX(-60px); }
+  55% { opacity: 0.74; }
   to { opacity: 1; transform: translateX(0); }
+}
+@keyframes weekExitNext {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-82px); }
+}
+@keyframes weekExitPrev {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(82px); }
 }
 .day-headers {
   display: grid;
@@ -895,6 +939,7 @@ let dragImageEl = null;
 let lastWeekFlipAt = 0;
 let suppressEventClickUntil = 0;
 let touchDrag = null;
+let weekSwipe = null;
 let repeatWeeks = 1;
 let repeatDays = new Set();
 let repeatApplied = false;
@@ -1127,12 +1172,12 @@ function updateDropPreviewFromPoint(clientX, clientY, eventId) {
 }
 
 function maybeFlipWeekDuringDrag(clientX, clientY, eventId) {
-  const threshold = 42;
+  const threshold = 118;
   const now = Date.now();
   let direction = 0;
   if (clientX <= threshold) direction = -1;
   if (clientX >= window.innerWidth - threshold) direction = 1;
-  if (!direction || now - lastWeekFlipAt < 320) return false;
+  if (!direction || now - lastWeekFlipAt < 920) return false;
   weekOffset += direction;
   lastWeekFlipAt = now;
   renderCal(direction);
@@ -1140,20 +1185,101 @@ function maybeFlipWeekDuringDrag(clientX, clientY, eventId) {
   return true;
 }
 
-function animateWeekTransition(direction) {
-  if (!direction) return;
+function captureWeekSnapshot(direction) {
+  if (!direction) return null;
   const header = document.getElementById('dayHeaders');
   const grid = document.getElementById('gridScroll');
-  const className = direction < 0 ? 'week-shift-prev' : 'week-shift-next';
-  [header, grid].forEach(element => {
-    element.classList.remove('week-shift-prev', 'week-shift-next');
-    void element.offsetWidth;
-    element.classList.add(className);
-    clearTimeout(element._weekAnimTimer);
-    element._weekAnimTimer = setTimeout(() => {
-      element.classList.remove(className);
-    }, 260);
+  if (!header || !grid || !grid.firstElementChild) return null;
+  const overlay = mk('div', `week-transition-overlay ${direction > 0 ? 'week-exit-next' : 'week-exit-prev'}`);
+  const headerClone = header.cloneNode(true);
+  const gridClone = grid.cloneNode(true);
+  gridClone.scrollTop = grid.scrollTop;
+  overlay.appendChild(headerClone);
+  overlay.appendChild(gridClone);
+  return overlay;
+}
+
+function clearWeekMotionState() {
+  const calArea = document.querySelector('.cal-area');
+  if (!calArea) return;
+  calArea.classList.remove('week-enter-next', 'week-enter-prev', 'week-swipe');
+  calArea.style.setProperty('--week-swipe-x', '0px');
+  calArea.style.setProperty('--week-swipe-opacity', '1');
+}
+
+function animateWeekTransition(direction, snapshot = null) {
+  clearWeekMotionState();
+  if (!direction) return;
+  const calArea = document.querySelector('.cal-area');
+  if (!calArea) return;
+  calArea.querySelectorAll('.week-transition-overlay').forEach(layer => layer.remove());
+  if (snapshot) calArea.appendChild(snapshot);
+  const enterClass = direction > 0 ? 'week-enter-next' : 'week-enter-prev';
+  requestAnimationFrame(() => {
+    if (snapshot) snapshot.classList.add('animate');
+    calArea.classList.add(enterClass);
   });
+  clearTimeout(calArea._weekAnimTimer);
+  calArea._weekAnimTimer = setTimeout(() => {
+    clearWeekMotionState();
+    if (snapshot) snapshot.remove();
+  }, 760);
+}
+
+function beginWeekSwipe(pointerId, clientX, clientY) {
+  if (touchDrag) return;
+  weekSwipe = {
+    pointerId,
+    startX: clientX,
+    startY: clientY,
+    deltaX: 0,
+    deltaY: 0,
+    active: false,
+    locked: false
+  };
+}
+
+function updateWeekSwipe(clientX, clientY) {
+  if (!weekSwipe) return false;
+  weekSwipe.deltaX = clientX - weekSwipe.startX;
+  weekSwipe.deltaY = clientY - weekSwipe.startY;
+  if (!weekSwipe.locked) {
+    if (Math.abs(weekSwipe.deltaX) < 10 && Math.abs(weekSwipe.deltaY) < 10) return false;
+    if (Math.abs(weekSwipe.deltaX) > Math.abs(weekSwipe.deltaY) * 1.25) {
+      weekSwipe.locked = true;
+      weekSwipe.active = true;
+    } else if (Math.abs(weekSwipe.deltaY) > Math.abs(weekSwipe.deltaX)) {
+      weekSwipe = null;
+      clearWeekMotionState();
+      return false;
+    }
+  }
+  if (!weekSwipe.active) return false;
+  const calArea = document.querySelector('.cal-area');
+  if (!calArea) return false;
+  const width = Math.max(calArea.clientWidth, 1);
+  const clampedX = Math.max(Math.min(weekSwipe.deltaX, width * 0.35), -width * 0.35);
+  const opacity = Math.max(0.68, 1 - Math.abs(clampedX) / (width * 0.9));
+  calArea.classList.add('week-swipe');
+  calArea.style.setProperty('--week-swipe-x', `${clampedX}px`);
+  calArea.style.setProperty('--week-swipe-opacity', `${opacity}`);
+  return true;
+}
+
+function finishWeekSwipe() {
+  if (!weekSwipe) return false;
+  const swipe = weekSwipe;
+  weekSwipe = null;
+  const calArea = document.querySelector('.cal-area');
+  const width = Math.max(calArea?.clientWidth || 1, 1);
+  const passed = Math.abs(swipe.deltaX) > Math.min(92, width * 0.16);
+  clearWeekMotionState();
+  if (!swipe.active || !passed) return false;
+  suppressEventClickUntil = Date.now() + 320;
+  const direction = swipe.deltaX < 0 ? 1 : -1;
+  weekOffset += direction;
+  renderCal(direction);
+  return true;
 }
 
 async function moveEventToSlot(eventId, day, h, m) {
@@ -1571,6 +1697,7 @@ function makeEventCard(event) {
 }
 
 function renderCal(transitionDirection = 0) {
+  const weekSnapshot = captureWeekSnapshot(transitionDirection);
   const days = getWeek();
   const mid = days[3];
   document.getElementById('monthLabel').textContent = `${MONTHS[mid.getMonth()]} ${mid.getFullYear()}`;
@@ -1626,6 +1753,7 @@ function renderCal(transitionDirection = 0) {
 
     column.addEventListener('click', entry => {
       if (!CAN_EDIT) return;
+      if (Date.now() < suppressEventClickUntil) return;
       if (entry.target.closest('.ev')) return;
       const slot = slotAt(entry.clientY - column.getBoundingClientRect().top);
       setPasteTarget(day, slot.h, slot.m);
@@ -1677,7 +1805,7 @@ function renderCal(transitionDirection = 0) {
   });
 
   renderMini();
-  animateWeekTransition(transitionDirection);
+  animateWeekTransition(transitionDirection, weekSnapshot);
   if (!initialScrollDone) {
     document.getElementById('gridScroll').scrollTop = 7 * HOUR_H - 30;
     initialScrollDone = true;
@@ -1916,6 +2044,12 @@ document.addEventListener('dragenter', entry => {
   if (!entry.target.closest('.day-col')) hideDropPreviews();
 });
 
+document.querySelector('.cal-area').addEventListener('pointerdown', entry => {
+  if (entry.pointerType !== 'touch') return;
+  if (entry.target.closest('.ev, .detail, .ctx, .repeat-modal, .repeat-overlay')) return;
+  beginWeekSwipe(entry.pointerId, entry.clientX, entry.clientY);
+});
+
 document.getElementById('miniPrev').onclick = () => { miniOffset -= 1; renderMini(); };
 document.getElementById('miniNext').onclick = () => { miniOffset += 1; renderMini(); };
 document.getElementById('startDisp').addEventListener('click', entry => { entry.stopPropagation(); openTimePicker('start'); });
@@ -2105,6 +2239,12 @@ document.getElementById('todayBtn').addEventListener('click', () => {
 });
 
 document.addEventListener('pointermove', entry => {
+  if (entry.pointerType === 'touch' && weekSwipe && entry.pointerId === weekSwipe.pointerId && !touchDrag) {
+    if (updateWeekSwipe(entry.clientX, entry.clientY)) {
+      entry.preventDefault();
+      return;
+    }
+  }
   if (!touchDrag || entry.pointerId !== touchDrag.pointerId || entry.pointerType !== 'touch') return;
   const moveDistance = Math.abs(entry.clientX - touchDrag.startX) + Math.abs(entry.clientY - touchDrag.startY);
   if (!touchDrag.active && moveDistance < 10) return;
@@ -2126,6 +2266,10 @@ document.addEventListener('pointermove', entry => {
 });
 
 document.addEventListener('pointerup', async entry => {
+  if (entry.pointerType === 'touch' && weekSwipe && entry.pointerId === weekSwipe.pointerId && !touchDrag) {
+    finishWeekSwipe();
+    return;
+  }
   if (!touchDrag || entry.pointerId !== touchDrag.pointerId) return;
   const activeDrag = touchDrag;
   touchDrag = null;
@@ -2143,6 +2287,10 @@ document.addEventListener('pointerup', async entry => {
 });
 
 document.addEventListener('pointercancel', entry => {
+  if (entry.pointerType === 'touch' && weekSwipe && entry.pointerId === weekSwipe.pointerId) {
+    weekSwipe = null;
+    clearWeekMotionState();
+  }
   if (!touchDrag || entry.pointerId !== touchDrag.pointerId) return;
   touchDrag.sourceElement.classList.remove('dragging');
   touchDrag = null;
@@ -2167,6 +2315,12 @@ loadEvents();
 </script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 
