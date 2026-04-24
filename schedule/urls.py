@@ -1,9 +1,10 @@
-from django.urls import path
+﻿from django.urls import path
+from django.views.generic import RedirectView
 
 from . import views
 
 urlpatterns = [
-    path('', views.index, name='home'),
+    path('', RedirectView.as_view(pattern_name='schedule', permanent=False), name='home'),
     path('about/', views.about, name='about'),
     path('schedule/', views.schedule, name='schedule'),
     path('schedule/api/events/', views.events_api, name='events_api'),

@@ -1,4 +1,4 @@
-import json
+﻿import json
 from datetime import datetime
 
 from django.contrib.auth.decorators import login_required
@@ -71,11 +71,21 @@ def _parse_datetime(value):
     return parsed
 
 
+def _student_display_name(student):
+    full_name = " ".join(
+        part for part in [student.first_name.strip(), student.last_name.strip()] if part
+    ).strip()
+    return full_name or student.email or student.username
+
+
 def _serialize_student(student):
     return {
         "id": student.id,
         "username": student.username,
         "email": student.email,
+        "first_name": student.first_name,
+        "last_name": student.last_name,
+        "display_name": _student_display_name(student),
     }
 
 
@@ -94,6 +104,27 @@ def _event_to_dict(event):
     }
 
 
+def _find_student_matches(token):
+    token = token.strip()
+    if not token:
+        return User.objects.none()
+
+    query = Q(username__iexact=token) | Q(email__iexact=token)
+
+    name_parts = [part for part in token.split() if part]
+    if len(name_parts) == 1:
+        query |= Q(first_name__iexact=token) | Q(last_name__iexact=token)
+    else:
+        first_name = name_parts[0]
+        last_name = " ".join(name_parts[1:])
+        reversed_first = name_parts[-1]
+        reversed_last = " ".join(name_parts[:-1])
+        query |= Q(first_name__iexact=first_name, last_name__iexact=last_name)
+        query |= Q(first_name__iexact=reversed_first, last_name__iexact=reversed_last)
+
+    return User.objects.filter(query).distinct().order_by("id")
+
+
 def _resolve_students(raw_participants):
     tokens = [
         token.strip()
@@ -108,21 +139,32 @@ def _resolve_students(raw_participants):
     normalized = []
 
     for token in tokens:
-        user = User.objects.filter(
-            Q(username__iexact=token) | Q(email__iexact=token)
-        ).first()
-        if not user:
+        matches = list(_find_student_matches(token)[:2])
+        if not matches:
             return None, None, JsonResponse(
                 {
                     "error": (
-                        "Не найден пользователь для участника "
-                        f"'{token}'. Укажите username или email существующего ученика."
+                        f"Не найден пользователь для участника '{token}'. "
+                        "Укажите логин, email, имя или 'Имя Фамилия' существующего ученика."
                     )
                 },
                 status=400,
             )
+
+        if len(matches) > 1:
+            return None, None, JsonResponse(
+                {
+                    "error": (
+                        f"Найдено несколько пользователей для '{token}'. "
+                        "Укажите точнее: логин, email или полное имя ученика."
+                    )
+                },
+                status=400,
+            )
+
+        user = matches[0]
         matched_users.append(user)
-        normalized.append(user.email or user.username)
+        normalized.append(_student_display_name(user))
 
     unique_users = []
     seen_ids = set()
@@ -255,3 +297,4 @@ def event_detail_api(request, event_id):
         return JsonResponse({"deleted": True})
 
     return HttpResponseNotAllowed(["PATCH", "DELETE", "POST"])
+
