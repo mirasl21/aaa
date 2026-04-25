@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -268,9 +268,49 @@ body {
 }
 .dh-num.today-num { background: var(--today); color: #fff; font-weight: 700; }
 .grid-scroll { flex: 1; overflow-y: auto; position: relative; }
-.grid-scroll::-webkit-scrollbar { width: 5px; }
+.grid-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
 .grid-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+.day-headers.student-mobile {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.day-headers.student-mobile::-webkit-scrollbar { display: none; }
+.grid-scroll.student-mobile {
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
 .time-grid { display: grid; grid-template-columns: 50px repeat(7, 1fr); min-height: calc(24 * var(--hour-h)); }
+.time-grid.student-mobile {
+  min-width: calc(50px + (var(--student-day-w, 140px) * var(--student-day-count, 3)));
+}
+.time-grid.student-mobile .day-col,
+.day-headers.student-mobile .dh {
+  min-width: var(--student-day-w, 140px);
+  scroll-snap-align: start;
+}
+.day-headers.student-mobile .dh-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 7;
+  min-width: 50px;
+  background: var(--bg);
+}
+.time-grid.student-mobile .t-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  min-width: 50px;
+  background: var(--bg);
+}
+.time-grid.student-mobile .t-label {
+  left: 8px;
+  right: auto;
+  font-size: 11px;
+  color: #8a8a8a;
+}
 .t-gutter { border-right: 1px solid var(--border); position: relative; }
 .t-label {
   position: absolute;
@@ -713,12 +753,112 @@ body {
   border: 1px solid var(--border2);
   white-space: nowrap;
 }
+.mobile-day-strip {
+  display: none;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(15, 15, 15, 0.92);
+  scrollbar-width: none;
+}
+.mobile-day-strip::-webkit-scrollbar { display: none; }
+.mobile-day-chip {
+  flex: 0 0 auto;
+  min-width: 58px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  text-align: center;
+  cursor: pointer;
+}
+.mobile-day-chip.active {
+  background: rgba(61, 107, 138, 0.24);
+  border-color: rgba(74, 127, 163, 0.55);
+  color: var(--text);
+}
+.mobile-day-chip.today {
+  box-shadow: inset 0 0 0 1px rgba(224, 84, 84, 0.32);
+}
+.mobile-day-dow {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.mobile-day-num {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.mobile-day-chip.active .mobile-day-num {
+  color: #fff;
+}
 @media (max-width: 1000px) {
   .sidebar { display: none; }
   .detail { width: 280px; }
 }
+.detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.26s ease;
+  z-index: 49;
+}
+.detail-backdrop.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.detail-backdrop.hidden {
+  display: none;
+}
+
 @media (max-width: 760px) {
-  .detail { position: absolute; right: 0; top: 48px; bottom: 0; width: min(90vw, 320px); z-index: 50; }
+  .detail-backdrop { display: block; }
+  .detail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: auto;
+    max-height: min(88vh, 820px);
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    box-shadow: 0 -22px 60px rgba(0, 0, 0, 0.52);
+    z-index: 50;
+    transform: translateY(calc(100% + 20px));
+    opacity: 0;
+    transition: transform 0.32s cubic-bezier(0.22, 0.9, 0.25, 1), opacity 0.22s ease;
+  }
+  .detail.hidden {
+    display: flex;
+    pointer-events: none;
+  }
+  .detail.sheet-open {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .detail-sheet-handle { display: flex; }
+  .dp-hdr {
+    padding-top: 8px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .dp-body {
+    padding: 14px 16px 10px;
+  }
+  .dp-footer {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(35, 35, 35, 0.92), rgba(35, 35, 35, 1));
+  }
 }
 </style>
 </head>
@@ -759,12 +899,14 @@ body {
   </div>
 
   <div class="cal-area">
+    <div class="mobile-day-strip" id="mobileDayStrip"></div>
     <div class="day-headers" id="dayHeaders"><div class="dh-gutter"></div></div>
     <div class="grid-scroll" id="gridScroll">
       <div class="time-grid" id="timeGrid"><div class="t-gutter"></div></div>
     </div>
   </div>
 
+  <div class="detail-backdrop hidden" id="detailBackdrop"></div>
   <div class="detail hidden" id="detail">
     <div class="dp-hdr">
       <div class="dp-type"><div class="dp-dot" id="dpDot"></div>Event</div>
@@ -904,6 +1046,7 @@ const COLORS = {
 };
 const EVENTS_URL = "{% url 'events_api' %}";
 const CAN_EDIT = {% if can_edit_calendar %}true{% else %}false{% endif %};
+const MOBILE_STUDENT_QUERY = window.matchMedia('(max-width: 760px)');
 const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 const baseToday = new Date();
 baseToday.setHours(0, 0, 0, 0);
@@ -934,12 +1077,18 @@ let ctxSlotH = 9;
 let ctxSlotM = 0;
 let lastPasteTarget = null;
 let initialScrollDone = false;
+let shouldAutoScrollToFocus = true;
 let draggingEventId = null;
 let dragImageEl = null;
 let lastWeekFlipAt = 0;
 let suppressEventClickUntil = 0;
 let touchDrag = null;
 let weekSwipe = null;
+let mobileStudentDate = new Date(baseToday);
+let mobileStudentTrackAnchor = new Date(baseToday);
+let mobileStudentDateTouched = false;
+let mobileStudentScrollSync = false;
+let mobileStudentSnapTimer = null;
 let repeatWeeks = 1;
 let repeatDays = new Set();
 let repeatApplied = false;
@@ -1002,6 +1151,147 @@ function getSun() {
 function getWeek() {
   const sun = getSun();
   return Array.from({ length: 7 }, (_, index) => addDays(sun, index));
+}
+
+function isStudentMobileView() {
+  return !CAN_EDIT && MOBILE_STUDENT_QUERY.matches;
+}
+
+function pickMobileStudentDate(days = getWeek()) {
+  const todayIndex = days.findIndex(day => sameDay(day, baseToday));
+  const counts = days.map(day => getEventsForDay(day).length);
+
+  if (weekOffset === 0 && todayIndex >= 0 && counts[todayIndex] > 0) {
+    return startOfDay(days[todayIndex]);
+  }
+
+  if (weekOffset === 0 && todayIndex >= 0) {
+    for (let index = todayIndex + 1; index < days.length; index += 1) {
+      if (counts[index] > 0) return startOfDay(days[index]);
+    }
+  }
+
+  const firstWithEvents = counts.findIndex(count => count > 0);
+  if (firstWithEvents >= 0) return startOfDay(days[firstWithEvents]);
+  if (weekOffset === 0 && todayIndex >= 0) return startOfDay(days[todayIndex]);
+  return startOfDay(mobileStudentDate);
+}
+
+function syncMobileStudentDate(days = getWeek()) {
+  if (!mobileStudentDateTouched) {
+    mobileStudentDate = pickMobileStudentDate(days);
+    return;
+  }
+  mobileStudentDate = startOfDay(mobileStudentDate);
+}
+
+function getMobileStudentDays() {
+  const center = startOfDay(mobileStudentDate);
+  return [addDays(center, -1), center, addDays(center, 1)];
+}
+
+function shiftMobileStudentDays(amount, transitionDirection = 0) {
+  const nextDate = addDays(startOfDay(mobileStudentDate), amount);
+  scrollStudentMobileToDate(nextDate, 'smooth');
+}
+
+function renderMobileDayStrip(days) {
+  const strip = document.getElementById('mobileDayStrip');
+  strip.style.display = 'none';
+  strip.innerHTML = '';
+}
+
+function getStudentMobileTrackDays(anchor = mobileStudentTrackAnchor) {
+  const center = startOfDay(anchor);
+  return Array.from({ length: 31 }, (_, index) => addDays(center, index - 15));
+}
+
+function getStudentMobileDayWidth() {
+  const calArea = document.querySelector('.cal-area');
+  const width = Math.max((calArea?.clientWidth || window.innerWidth) - 50, 240);
+  return Math.max(Math.round(width / 3), 118);
+}
+
+function getStudentMobileCenterOffset(dayWidth = getStudentMobileDayWidth()) {
+  return dayWidth;
+}
+
+function setMonthLabel(date) {
+  document.getElementById('monthLabel').textContent = `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+function getStudentMobileScrollTarget(index, dayWidth = getStudentMobileDayWidth()) {
+  return Math.max(0, (index - 1) * dayWidth);
+}
+
+function scrollStudentMobileToDate(date, behavior = 'smooth') {
+  const nextDate = startOfDay(date);
+  mobileStudentDateTouched = true;
+  const days = getStudentMobileTrackDays(mobileStudentTrackAnchor);
+  const index = days.findIndex(day => sameDay(day, nextDate));
+  if (index < 0) {
+    mobileStudentDate = nextDate;
+    mobileStudentTrackAnchor = nextDate;
+    renderCal(0);
+    return;
+  }
+  mobileStudentDate = nextDate;
+  setMonthLabel(mobileStudentDate);
+  const dayWidth = getStudentMobileDayWidth();
+  const targetLeft = getStudentMobileScrollTarget(index, dayWidth);
+  const grid = document.getElementById('gridScroll');
+  const header = document.getElementById('dayHeaders');
+  if (grid) {
+    grid.scrollTo({ left: targetLeft, behavior });
+    grid._studentLastScrollLeft = targetLeft;
+  }
+  if (header) header.scrollTo({ left: targetLeft, behavior: behavior === 'smooth' ? 'smooth' : 'auto' });
+}
+
+function updateStudentMobileDateFromScroll() {
+  const grid = document.getElementById('gridScroll');
+  const days = getStudentMobileTrackDays(mobileStudentTrackAnchor);
+  const dayWidth = getStudentMobileDayWidth();
+  const centerOffset = getStudentMobileCenterOffset(dayWidth);
+  const index = Math.max(0, Math.min(days.length - 1, Math.round((grid.scrollLeft + centerOffset) / dayWidth)));
+  mobileStudentDateTouched = true;
+  mobileStudentDate = startOfDay(days[index]);
+  setMonthLabel(mobileStudentDate);
+  return { days, dayWidth, index };
+}
+
+function snapStudentMobileScroll(behavior = 'smooth') {
+  const grid = document.getElementById('gridScroll');
+  if (!grid || !isStudentMobileView()) return;
+  const { days, dayWidth, index } = updateStudentMobileDateFromScroll();
+  const target = getStudentMobileScrollTarget(index, dayWidth);
+  grid.scrollTo({ left: target, behavior });
+  grid._studentLastScrollLeft = target;
+  const header = document.getElementById('dayHeaders');
+  header.scrollTo({ left: target, behavior: behavior === 'smooth' ? 'smooth' : 'auto' });
+  if (index <= 2 || index >= days.length - 3) {
+    mobileStudentTrackAnchor = startOfDay(mobileStudentDate);
+    requestAnimationFrame(() => renderCal(0));
+  }
+}
+
+function syncStudentMobileHeader() {
+  const grid = document.getElementById('gridScroll');
+  const header = document.getElementById('dayHeaders');
+  if (!grid || !header || !isStudentMobileView()) return;
+  const previousLeft = grid._studentLastScrollLeft ?? grid.scrollLeft;
+  const horizontalMoved = Math.abs(grid.scrollLeft - previousLeft) > 1;
+  grid._studentLastScrollLeft = grid.scrollLeft;
+  if (!horizontalMoved) return;
+  updateStudentMobileDateFromScroll();
+  if (mobileStudentScrollSync) return;
+  mobileStudentScrollSync = true;
+  header.scrollLeft = grid.scrollLeft;
+  clearTimeout(mobileStudentSnapTimer);
+  mobileStudentSnapTimer = setTimeout(() => snapStudentMobileScroll('smooth'), 240);
+  requestAnimationFrame(() => {
+    mobileStudentScrollSync = false;
+  });
 }
 
 function fmtDayLabel(date) {
@@ -1178,6 +1468,7 @@ function maybeFlipWeekDuringDrag(clientX, clientY, eventId) {
   if (clientX <= threshold) direction = -1;
   if (clientX >= window.innerWidth - threshold) direction = 1;
   if (!direction || now - lastWeekFlipAt < 920) return false;
+  mobileStudentDateTouched = false;
   weekOffset += direction;
   lastWeekFlipAt = now;
   renderCal(direction);
@@ -1277,6 +1568,11 @@ function finishWeekSwipe() {
   if (!swipe.active || !passed) return false;
   suppressEventClickUntil = Date.now() + 320;
   const direction = swipe.deltaX < 0 ? 1 : -1;
+  if (isStudentMobileView()) {
+    shiftMobileStudentDays(direction, direction);
+    return true;
+  }
+  mobileStudentDateTouched = false;
   weekOffset += direction;
   renderCal(direction);
   return true;
@@ -1489,6 +1785,7 @@ async function loadEvents() {
   try {
     const payload = await apiFetch(EVENTS_URL, { method: 'GET', headers: {} });
     events = payload.events.map(normalizeEvent);
+    shouldAutoScrollToFocus = true;
     renderCal();
   } catch (error) {
     showTip(error.message || 'Could not load events.');
@@ -1548,6 +1845,7 @@ function renderMini() {
       const currentSunday = addDays(baseToday, -baseToday.getDay());
       const nextWeekOffset = Math.round((targetSunday - currentSunday) / 86400000 / 7);
       const direction = nextWeekOffset === weekOffset ? 0 : (nextWeekOffset > weekOffset ? 1 : -1);
+      mobileStudentDateTouched = false;
       weekOffset = nextWeekOffset;
       renderCal(direction);
     });
@@ -1575,6 +1873,19 @@ function renderMini() {
 
 function getEventsForDay(day) {
   return events.filter(event => sameDay(event.start, day) && matchesSearch(event));
+}
+
+function getAutoScrollTop(days, preferredDay = null) {
+  const focusDay = preferredDay && days.some(day => sameDay(day, preferredDay))
+    ? startOfDay(preferredDay)
+    : (days.some(day => sameDay(day, baseToday)) ? startOfDay(baseToday) : startOfDay(days[0]));
+  const dayEvents = getEventsForDay(focusDay).slice().sort((a, b) => a.start - b.start);
+  if (dayEvents.length) {
+    const firstEvent = dayEvents[0];
+    return Math.max(0, toY(firstEvent.start.getHours(), firstEvent.start.getMinutes()) - 56);
+  }
+  const now = new Date();
+  return Math.max(0, toY(now.getHours(), now.getMinutes()) - 72);
 }
 
 function layoutEvents(dayEvents) {
@@ -1697,12 +2008,21 @@ function makeEventCard(event) {
 }
 
 function renderCal(transitionDirection = 0) {
-  const weekSnapshot = captureWeekSnapshot(transitionDirection);
-  const days = getWeek();
-  const mid = days[3];
-  document.getElementById('monthLabel').textContent = `${MONTHS[mid.getMonth()]} ${mid.getFullYear()}`;
+  const mobileStudent = isStudentMobileView();
+  const weekSnapshot = mobileStudent ? null : captureWeekSnapshot(transitionDirection);
+  const weekDays = getWeek();
+  syncMobileStudentDate(weekDays);
+  if (mobileStudent) mobileStudentTrackAnchor = startOfDay(mobileStudentDate);
+  renderMobileDayStrip(weekDays);
+  const days = mobileStudent ? getStudentMobileTrackDays(mobileStudentTrackAnchor) : weekDays;
+  const mid = mobileStudent ? startOfDay(mobileStudentDate) : weekDays[3];
+  setMonthLabel(mid);
 
   const header = document.getElementById('dayHeaders');
+  header.classList.toggle('student-mobile', mobileStudent);
+  header.style.gridTemplateColumns = mobileStudent
+    ? `50px repeat(${days.length}, var(--student-day-w, 140px))`
+    : `50px repeat(${days.length}, 1fr)`;
   header.innerHTML = '<div class="dh-gutter"></div>';
   days.forEach(day => {
     const cell = mk('div', 'dh');
@@ -1711,7 +2031,19 @@ function renderCal(transitionDirection = 0) {
     header.appendChild(cell);
   });
 
+  const gridWrap = document.getElementById('gridScroll');
+  gridWrap.classList.toggle('student-mobile', mobileStudent);
+  if (mobileStudent) {
+    const dayWidth = getStudentMobileDayWidth();
+    document.querySelector('.cal-area').style.setProperty('--student-day-w', `${dayWidth}px`);
+    document.querySelector('.cal-area').style.setProperty('--student-day-count', `${days.length}`);
+  }
+
   const grid = document.getElementById('timeGrid');
+  grid.classList.toggle('student-mobile', mobileStudent);
+  grid.style.gridTemplateColumns = mobileStudent
+    ? `50px repeat(${days.length}, var(--student-day-w, 140px))`
+    : `50px repeat(${days.length}, 1fr)`;
   grid.innerHTML = '';
 
   const gutter = mk('div', 't-gutter');
@@ -1805,10 +2137,21 @@ function renderCal(transitionDirection = 0) {
   });
 
   renderMini();
-  animateWeekTransition(transitionDirection, weekSnapshot);
-  if (!initialScrollDone) {
-    document.getElementById('gridScroll').scrollTop = 7 * HOUR_H - 30;
+  if (mobileStudent) {
+    const gridScroller = document.getElementById('gridScroll');
+    const dayWidth = getStudentMobileDayWidth();
+    const centerIndex = days.findIndex(day => sameDay(day, mobileStudentDate));
+    const targetLeft = Math.max(0, centerIndex * dayWidth);
+    gridScroller.scrollLeft = targetLeft;
+    header.scrollLeft = targetLeft;
+  } else {
+    animateWeekTransition(transitionDirection, weekSnapshot);
+  }
+  if (shouldAutoScrollToFocus || !initialScrollDone) {
+    const focusTop = getAutoScrollTop(days, mobileStudent ? mobileStudentDate : baseToday);
+    document.getElementById('gridScroll').scrollTop = focusTop;
     initialScrollDone = true;
+    shouldAutoScrollToFocus = false;
   }
 }
 
@@ -1877,15 +2220,48 @@ function openTimePicker(which) {
   }
 }
 
+function isMobileSheetView() {
+  return window.innerWidth <= 760;
+}
+
 function openPanel() {
-  document.getElementById('detail').classList.remove('hidden');
+  const detail = document.getElementById('detail');
+  const backdrop = document.getElementById('detailBackdrop');
+  clearTimeout(detail._closeTimer);
+  detail.classList.remove('hidden');
+  if (backdrop) backdrop.classList.remove('hidden');
+  if (isMobileSheetView()) {
+    requestAnimationFrame(() => {
+      detail.classList.add('sheet-open');
+      if (backdrop) backdrop.classList.add('visible');
+    });
+    document.body.style.overflow = 'hidden';
+  } else {
+    detail.classList.remove('sheet-open');
+    if (backdrop) backdrop.classList.remove('visible');
+    document.body.style.overflow = '';
+  }
 }
 
 function closePanel() {
-  document.getElementById('detail').classList.add('hidden');
-  selId = null;
-  panelDate = null;
-  closeDropdowns();
+  const detail = document.getElementById('detail');
+  const backdrop = document.getElementById('detailBackdrop');
+  const finishClose = () => {
+    detail.classList.add('hidden');
+    if (backdrop) backdrop.classList.add('hidden');
+    selId = null;
+    panelDate = null;
+    closeDropdowns();
+    document.body.style.overflow = '';
+  };
+  clearTimeout(detail._closeTimer);
+  if (isMobileSheetView()) {
+    detail.classList.remove('sheet-open');
+    if (backdrop) backdrop.classList.remove('visible');
+    detail._closeTimer = setTimeout(finishClose, 240);
+  } else {
+    finishClose();
+  }
 }
 
 function applyPanelMode() {
@@ -2046,6 +2422,7 @@ document.addEventListener('dragenter', entry => {
 
 document.querySelector('.cal-area').addEventListener('pointerdown', entry => {
   if (entry.pointerType !== 'touch') return;
+  if (isStudentMobileView()) return;
   if (entry.target.closest('.ev, .detail, .ctx, .repeat-modal, .repeat-overlay')) return;
   beginWeekSwipe(entry.pointerId, entry.clientX, entry.clientY);
 });
@@ -2065,6 +2442,15 @@ document.querySelectorAll('#dpSwatches .sw').forEach(swatch => {
 
 document.getElementById('dpCloseBtn').addEventListener('click', closePanel);
 document.getElementById('dpCancel').addEventListener('click', closePanel);
+document.getElementById('detailBackdrop').addEventListener('click', closePanel);
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 760) {
+    document.body.style.overflow = '';
+    document.getElementById('detail').classList.remove('sheet-open');
+    document.getElementById('detailBackdrop').classList.remove('visible');
+    document.getElementById('detailBackdrop').classList.add('hidden');
+  }
+});
 document.getElementById('repeatBtn').addEventListener('click', openRepeatModal);
 document.getElementById('repeatOverlay').addEventListener('click', closeRepeatModal);
 document.getElementById('repeatCancel').addEventListener('click', closeRepeatModal);
@@ -2104,12 +2490,18 @@ document.addEventListener('click', () => {
   document.getElementById('ctx').classList.add('hidden');
 });
 
-document.addEventListener('keydown', entry => {
+document.addEventListener('keydown', async entry => {
   if (entry.key === 'Escape') {
     closePanel();
     document.getElementById('ctx').classList.add('hidden');
   }
   if (!CAN_EDIT || isEditableField(entry.target)) return;
+  if (entry.key === 'Delete' || entry.key === 'Del') {
+    if (!selId) return;
+    entry.preventDefault();
+    await deleteSelectedEvent();
+    return;
+  }
   const hotkey = entry.ctrlKey || entry.metaKey;
   if (!hotkey) return;
   if (entry.key.toLowerCase() === 'c') {
@@ -2168,18 +2560,23 @@ document.getElementById('dpSave').addEventListener('click', async entry => {
   }
 });
 
-document.getElementById('dpDeleteBtn').addEventListener('click', async entry => {
-  entry.stopPropagation();
-  if (!CAN_EDIT) return;
-  if (!selId) return;
+async function deleteSelectedEvent() {
+  if (!CAN_EDIT || !selId) return false;
   try {
     await deleteEvent(selId);
     renderCal();
     closePanel();
     showTip('Event deleted.');
+    return true;
   } catch (error) {
     showTip(error.message || 'Could not delete event.');
+    return false;
   }
+}
+
+document.getElementById('dpDeleteBtn').addEventListener('click', async entry => {
+  entry.stopPropagation();
+  await deleteSelectedEvent();
 });
 
 function doCopy() {
@@ -2229,13 +2626,50 @@ document.getElementById('ctxDelete').addEventListener('click', async entry => {
   document.getElementById('ctx').classList.add('hidden');
 });
 
-document.getElementById('prevW').addEventListener('click', () => { weekOffset -= 1; renderCal(-1); });
-document.getElementById('nextW').addEventListener('click', () => { weekOffset += 1; renderCal(1); });
+document.getElementById('prevW').addEventListener('click', () => {
+  if (isStudentMobileView()) {
+    shiftMobileStudentDays(-1, 0);
+    return;
+  }
+  mobileStudentDateTouched = false;
+  weekOffset -= 1;
+  renderCal(-1);
+});
+document.getElementById('nextW').addEventListener('click', () => {
+  if (isStudentMobileView()) {
+    shiftMobileStudentDays(1, 0);
+    return;
+  }
+  mobileStudentDateTouched = false;
+  weekOffset += 1;
+  renderCal(1);
+});
 document.getElementById('todayBtn').addEventListener('click', () => {
+  if (isStudentMobileView()) {
+    mobileStudentDateTouched = true;
+    mobileStudentDate = new Date(baseToday);
+    mobileStudentTrackAnchor = new Date(baseToday);
+    shouldAutoScrollToFocus = true;
+    renderCal(0);
+    return;
+  }
   const direction = weekOffset === 0 ? 0 : (weekOffset > 0 ? -1 : 1);
   weekOffset = 0;
   miniOffset = 0;
+  mobileStudentDateTouched = false;
+  shouldAutoScrollToFocus = true;
   renderCal(direction);
+});
+
+MOBILE_STUDENT_QUERY.addEventListener('change', () => {
+  mobileStudentDateTouched = false;
+  mobileStudentTrackAnchor = new Date(baseToday);
+  renderCal();
+});
+
+document.getElementById('gridScroll').addEventListener('scroll', () => {
+  if (!isStudentMobileView()) return;
+  syncStudentMobileHeader();
 });
 
 document.addEventListener('pointermove', entry => {
@@ -2315,6 +2749,13 @@ loadEvents();
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
 
 
 
