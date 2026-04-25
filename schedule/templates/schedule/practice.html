@@ -1,4 +1,5 @@
-﻿<!DOCTYPE html>
+﻿{% load i18n %}
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -273,7 +274,7 @@ body {
     </div>
     <div class="hero-meta">
       <div class="meta-pill">{{ event.start_at|date:"D, M j" }}</div>
-      <div class="meta-pill">{{ event.start_at|date:"g:i A" }} - {{ event.end_at|date:"g:i A" }}</div>
+      {% language 'en' %}<div class="meta-pill">{{ event.start_at|date:"g:i a" }} - {{ event.end_at|date:"g:i a" }}</div>{% endlanguage %}
       <div class="meta-pill">{{ event.participants|default:"No students yet" }}</div>
     </div>
   </div>
@@ -543,6 +544,8 @@ body {
 const cardContainer = document.getElementById('cardsPreview');
 const fillBlanksList = document.getElementById('fillBlanksList');
 const exerciseFeedback = document.getElementById('exerciseFeedback');
+const wordsSearch = document.getElementById('wordsSearch');
+const readonlyWordsSearch = document.getElementById('readonlyWordsSearch');
 
 document.querySelectorAll('[data-flip-card] button').forEach(button => {
   button.addEventListener('click', () => {
@@ -564,6 +567,28 @@ function normalizeAnswer(value) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+function filterWordCollection(containerSelector, query) {
+  const container = document.querySelector(containerSelector);
+  if (!container) return;
+  const normalized = query.trim().toLowerCase();
+  container.querySelectorAll('[data-word-item], .word-readonly').forEach(item => {
+    const haystack = item.innerText.toLowerCase();
+    item.style.display = !normalized || haystack.includes(normalized) ? '' : 'none';
+  });
+}
+
+function bindWordSearch() {
+  if (wordsSearch) {
+    wordsSearch.addEventListener('input', () => {
+      filterWordCollection('#wordsEditor', wordsSearch.value);
+    });
+  }
+  if (readonlyWordsSearch) {
+    readonlyWordsSearch.addEventListener('input', () => {
+      filterWordCollection('#readonlyWordsList', readonlyWordsSearch.value);
+    });
+  }
+}
 function bindExerciseActions() {
   if (!fillBlanksList) return;
 
@@ -721,5 +746,7 @@ bindExerciseActions();
 </script>
 </body>
 </html>
+
+
 
 
