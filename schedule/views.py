@@ -599,3 +599,4 @@ def event_practice(request, event_id):
         },
     )
 
+
