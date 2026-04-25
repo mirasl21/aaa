@@ -574,6 +574,15 @@ def event_practice(request, event_id):
         return redirect(f"{reverse('event_practice', args=[event.id])}?saved=1")
 
     words = list(practice.words.all())
+    fill_blanks_items = _load_fill_blanks(practice.fill_blanks_payload)
+    if fill_blanks_items:
+        random.shuffle(fill_blanks_items)
+    fill_blanks_word_bank = list(dict.fromkeys(item["answer"] for item in fill_blanks_items if item.get("answer")))
+    if not fill_blanks_word_bank:
+        fill_blanks_word_bank = [word.term for word in words if word.term]
+    if fill_blanks_word_bank:
+        random.shuffle(fill_blanks_word_bank)
+
     return render(
         request,
         "schedule/practice.html",
@@ -582,10 +591,11 @@ def event_practice(request, event_id):
             "practice": practice,
             "words": words,
             "cards": list(practice.cards.all()),
-            "fill_blanks_items": _load_fill_blanks(practice.fill_blanks_payload),
-            "fill_blanks_word_bank": [word.term for word in words if word.term],
+            "fill_blanks_items": fill_blanks_items,
+            "fill_blanks_word_bank": fill_blanks_word_bank,
             "can_edit_practice": can_edit,
             "saved": request.GET.get("saved") == "1",
             "ai_enrichment_enabled": bool(os.environ.get("OPENAI_API_KEY")),
         },
     )
+

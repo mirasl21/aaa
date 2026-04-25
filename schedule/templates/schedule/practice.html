@@ -150,15 +150,16 @@ body {
 .flip-text-wrap {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 6px 0;
+  overflow: auto;
 }
 .flip-text {
   width: 100%;
-  font-size: clamp(26px, 2.8vw, 36px);
-  line-height: 1.24;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-size: clamp(18px, 2vw, 28px);
+  line-height: 1.28;
+  font-weight: 700;
+  letter-spacing: -0.015em;
   color: #ffffff;
   white-space: pre-wrap;
   word-break: break-word;
@@ -188,6 +189,9 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 18px;
+  max-height: 120px;
+  overflow: auto;
+  padding-right: 6px;
 }
 .word-chip {
   padding: 8px 12px;
@@ -249,7 +253,7 @@ body {
   .panel[data-mobile-panel="sentences"] { display: none; }
   .panel.mobile-active { display: block !important; }
   .flip-card, .flip-card button, .flip-inner { min-height: 250px; }
-  .flip-text { font-size: clamp(22px, 7vw, 30px); }
+  .flip-text { font-size: clamp(17px, 5.8vw, 24px); }
   .exercise-input { max-width: 100%; }
   .words-list { max-height: none; overflow: visible; padding-right: 0; }
   .words-search { position: static; background: transparent; padding-bottom: 0; }
@@ -746,6 +750,7 @@ bindExerciseActions();
 </script>
 </body>
 </html>
+
 
 
 
