@@ -1,4 +1,5 @@
 ﻿import json
+import logging
 import os
 import random
 from datetime import datetime
@@ -19,14 +20,14 @@ from .models import CalendarEvent, LessonPractice, PracticeCard, PracticeWord
 
 TEACHER_GROUP_NAMES = ("teacher", "teachers", "Teacher", "Teachers")
 User = get_user_model()
-
+logger = logging.getLogger(__name__)
 
 FILL_BLANK_FALLBACK_TEMPLATES = [
-    "Please write ____ in the blank.",
-    "Today we are practicing the word ____.",
-    "Can you complete this sentence with ____?",
-    "The correct word here is ____.",
-    "Use ____ to complete the sentence.",
+    "By the time the meeting began, everyone had already read the ____ twice.",
+    "She tried to sound confident, but her voice made the ____ obvious.",
+    "The article raised an unexpected ____ that nobody in class had mentioned before.",
+    "Even after a long discussion, they still could not agree on the best ____.",
+    "His final answer was clear, but the ____ behind it was even more interesting.",
 ]
 
 
@@ -280,10 +281,16 @@ def _extract_response_text(payload):
 def _openai_json_response(system_prompt, user_payload):
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
+        logger.warning("Practice AI skipped: OPENAI_API_KEY is not set.")
         return None
 
+    model_name = (os.environ.get("OPENAI_PRACTICE_MODEL") or "gpt-5-mini").strip()
+    if not model_name:
+        model_name = "gpt-5-mini"
+    model_name = model_name.lower().replace(" ", "-")
+
     payload = {
-        "model": os.environ.get("OPENAI_PRACTICE_MODEL", "gpt-5-mini"),
+        "model": model_name,
         "input": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
@@ -304,16 +311,39 @@ def _openai_json_response(system_prompt, user_payload):
     try:
         with urlrequest.urlopen(req, timeout=25) as response:
             response_payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+    except HTTPError as error:
+        try:
+            error_body = error.read().decode("utf-8", errors="replace")
+        except Exception:
+            error_body = "<no body>"
+        logger.warning(
+            "Practice AI request failed with HTTP %s for model '%s': %s",
+            error.code,
+            model_name,
+            error_body,
+        )
+        return None
+    except (URLError, TimeoutError) as error:
+        logger.warning("Practice AI request failed for model '%s': %s", model_name, error)
+        return None
+    except json.JSONDecodeError as error:
+        logger.warning("Practice AI returned invalid JSON for model '%s': %s", model_name, error)
         return None
 
     raw_text = _extract_response_text(response_payload)
     if not raw_text:
+        logger.warning("Practice AI returned no text output for model '%s'.", model_name)
         return None
 
     try:
         return json.loads(raw_text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as error:
+        logger.warning(
+            "Practice AI returned non-JSON output for model '%s': %s | payload=%s",
+            model_name,
+            error,
+            raw_text,
+        )
         return None
 
 
@@ -329,7 +359,8 @@ def _enrich_words_with_openai(words):
     response_payload = _openai_json_response(
         (
             "You help a language teacher prepare lesson vocabulary. "
-            "Return JSON only. For each word, provide a concise translation into Russian and a short meaning or usage note."
+            "Return JSON only. For each word, provide a concise translation into Russian and a short English-only meaning or usage note. "
+            "The note must be entirely in English and must not contain Russian text, translations, or bilingual examples."
         ),
         {
             "task": "Fill missing translation and note fields for lesson words.",
@@ -371,7 +402,6 @@ def _fallback_fill_blanks(words):
             {
                 "sentence": template,
                 "answer": term,
-                "translation_hint": (item.get("translation") or "").strip(),
             }
         )
     return exercises
@@ -393,15 +423,16 @@ def _generate_fill_blanks(words):
     response_payload = _openai_json_response(
         (
             "You create fill-in-the-blank exercises for an English lesson. "
-            "Return JSON only. For each word, write one short natural English sentence with exactly one blank written as ____ . "
-            "Keep the sentence understandable for learners and make the missing word equal to the target word."
+            "Return JSON only. For each word, write one natural, slightly challenging, and interesting English sentence with exactly one blank written as ____ . "
+            "Aim for variety in context and sentence structure, roughly CEFR A2-B2 depending on the word, and avoid overly simple textbook phrasing. "
+            "The sentence should still be clear enough for a learner to solve from context, and the missing word must be exactly equal to the target word."
         ),
         {
-            "task": "Create one fill-in-the-blank sentence for each vocabulary word.",
+            "task": "Create one slightly more advanced and engaging fill-in-the-blank sentence for each vocabulary word.",
             "words": source_words,
             "response_format": {
                 "exercises": [
-                    {"sentence": "I ____ every morning.", "answer": "run", "translation_hint": "бегать"}
+                    {"sentence": "I ____ every morning.", "answer": "run"}
                 ]
             },
         },
@@ -416,18 +447,81 @@ def _generate_fill_blanks(words):
             continue
         sentence = str(item.get("sentence", "")).strip()
         answer = str(item.get("answer", "")).strip()
-        translation_hint = str(item.get("translation_hint", "")).strip()
         if not sentence or "____" not in sentence or not answer:
             continue
         exercises.append(
             {
                 "sentence": sentence,
                 "answer": answer,
-                "translation_hint": translation_hint,
             }
         )
 
     return exercises or _fallback_fill_blanks(source_words)
+
+
+def _parse_fill_blanks_editor(raw_value):
+    try:
+        payload = json.loads(raw_value or "[]")
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(payload, list):
+        return None
+
+    cleaned = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        answer = str(item.get("answer", "")).strip()
+        sentence = str(item.get("sentence", "")).strip()
+        selected = bool(item.get("selected"))
+        if not answer:
+            continue
+        cleaned.append(
+            {
+                "answer": answer,
+                "sentence": sentence,
+                "selected": selected,
+            }
+        )
+    return cleaned
+
+
+def _build_fill_blanks(words, requested_items):
+    word_lookup = {}
+    for item in words:
+        term = (item.get("term") or "").strip()
+        if term and term not in word_lookup:
+            word_lookup[term] = item
+
+    selected_terms = []
+    manual_sentences = {}
+    for item in requested_items:
+        term = item["answer"]
+        if term not in word_lookup or not item.get("selected"):
+            continue
+        if term not in selected_terms:
+            selected_terms.append(term)
+        if item.get("sentence"):
+            manual_sentences[term] = item["sentence"]
+
+    generated_map = {}
+    terms_to_generate = [term for term in selected_terms if term not in manual_sentences]
+    if terms_to_generate:
+        generated_items = _generate_fill_blanks([word_lookup[term] for term in terms_to_generate])
+        for item in generated_items:
+            term = str(item.get("answer", "")).strip()
+            sentence = str(item.get("sentence", "")).strip()
+            if term and sentence and term not in generated_map:
+                generated_map[term] = sentence
+
+    result = []
+    for term in selected_terms:
+        sentence = manual_sentences.get(term) or generated_map.get(term, "")
+        if not sentence:
+            continue
+        result.append({"answer": term, "sentence": sentence})
+    return result
 
 
 def _load_fill_blanks(raw_payload):
@@ -445,7 +539,6 @@ def _load_fill_blanks(raw_payload):
             continue
         sentence = str(item.get("sentence", "")).strip()
         answer = str(item.get("answer", "")).strip()
-        translation_hint = str(item.get("translation_hint", "")).strip()
         if not sentence or not answer:
             continue
         cleaned.append(
@@ -453,7 +546,7 @@ def _load_fill_blanks(raw_payload):
                 "id": index,
                 "sentence": sentence,
                 "answer": answer,
-                "translation_hint": translation_hint,
+                "selected": True,
             }
         )
     return cleaned
@@ -535,11 +628,12 @@ def event_practice(request, event_id):
 
         words = _parse_practice_items(request.POST.get("words_json"), ["term", "translation", "note"])
         cards = _parse_practice_items(request.POST.get("cards_json"), ["front_text", "back_text"])
-        if words is None or cards is None:
+        fill_blanks_editor = _parse_fill_blanks_editor(request.POST.get("fill_blanks_json"))
+        if words is None or cards is None or fill_blanks_editor is None:
             return HttpResponseForbidden("Invalid practice payload.")
 
         words = _enrich_words_with_openai(words)
-        fill_blanks_items = _generate_fill_blanks(words)
+        fill_blanks_items = _build_fill_blanks(words, fill_blanks_editor)
         practice.title = (request.POST.get("practice_title") or event.title).strip()[:255]
         practice.description = (request.POST.get("practice_description") or "").strip()
         practice.fill_blanks_payload = json.dumps(fill_blanks_items, ensure_ascii=False)
@@ -576,13 +670,14 @@ def event_practice(request, event_id):
 
     words = list(practice.words.all())
     fill_blanks_items = _load_fill_blanks(practice.fill_blanks_payload)
-    if fill_blanks_items:
-        random.shuffle(fill_blanks_items)
-    fill_blanks_word_bank = list(dict.fromkeys(item["answer"] for item in fill_blanks_items if item.get("answer")))
-    if not fill_blanks_word_bank:
-        fill_blanks_word_bank = [word.term for word in words if word.term]
-    if fill_blanks_word_bank:
-        random.shuffle(fill_blanks_word_bank)
+    fill_blanks_word_bank = [word.term for word in words if word.term]
+    if not can_edit:
+        if fill_blanks_items:
+            random.shuffle(fill_blanks_items)
+        student_bank = list(dict.fromkeys(item["answer"] for item in fill_blanks_items if item.get("answer")))
+        fill_blanks_word_bank = student_bank or fill_blanks_word_bank
+        if fill_blanks_word_bank:
+            random.shuffle(fill_blanks_word_bank)
 
     return render(
         request,

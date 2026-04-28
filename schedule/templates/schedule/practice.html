@@ -1,4 +1,3 @@
-﻿{% load i18n %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,14 +9,12 @@
   --bg: #171717;
   --surface: #202020;
   --surface2: #282828;
-  --surface3: #313131;
   --border: #343434;
   --border2: #3f3f3f;
   --text: #ececec;
   --muted: #979797;
   --accent: #6fcf97;
   --accent2: #6d8df5;
-  --accent-soft: rgba(109, 141, 245, 0.12);
   --danger: #e67676;
   --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
 }
@@ -60,6 +57,7 @@ body {
 .panel-head span { color: var(--muted); font-size: 13px; }
 .panel-body { padding: 18px 20px 22px; }
 .section-stack { display: grid; gap: 12px; }
+.subgrid { display: grid; gap: 10px; }
 .text-input, .textarea, .exercise-input {
   width: 100%;
   background: var(--surface2);
@@ -71,7 +69,6 @@ body {
 }
 .textarea { min-height: 88px; resize: vertical; }
 .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-.subgrid { display: grid; gap: 10px; }
 .word-item, .card-editor, .word-readonly, .exercise-item {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -201,6 +198,59 @@ body {
   color: #dce6ff;
   font-size: 13px;
 }
+.word-chip-toggle {
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.word-chip-toggle:hover {
+  transform: translateY(-1px);
+  background: rgba(109, 141, 245, 0.18);
+}
+.word-chip-toggle.active {
+  background: rgba(111, 207, 151, 0.16);
+  border-color: rgba(111, 207, 151, 0.42);
+  color: #dcf8e5;
+}
+.sentence-builder {
+  display: grid;
+  gap: 16px;
+}
+.sentence-builder-head {
+  display: grid;
+  gap: 8px;
+}
+.sentence-builder-copy {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.sentence-editor-list {
+  display: grid;
+  gap: 12px;
+}
+.sentence-editor-item {
+  display: grid;
+  gap: 10px;
+}
+.sentence-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sentence-editor-term {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f3f3f3;
+}
+.sentence-editor-help {
+  color: var(--muted);
+  font-size: 13px;
+}
+.sentence-editor-item .textarea {
+  min-height: 98px;
+}
 .exercise-list { display: grid; gap: 12px; }
 .exercise-item { display: grid; gap: 12px; }
 .exercise-sentence {
@@ -221,13 +271,6 @@ body {
   border-color: rgba(230, 118, 118, 0.7);
   background: rgba(230, 118, 118, 0.1);
   box-shadow: 0 0 0 3px rgba(230, 118, 118, 0.1);
-}
-.exercise-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 .exercise-actions {
   display: flex;
@@ -277,8 +320,8 @@ body {
       <p>{{ practice.description|default:event.description|default:"Practice space for this lesson." }}</p>
     </div>
     <div class="hero-meta">
-      <div class="meta-pill">{{ event.start_at|date:"D, M j" }}</div>
-      {% language 'en' %}<div class="meta-pill">{{ event.start_at|date:"g:i a" }} - {{ event.end_at|date:"g:i a" }}</div>{% endlanguage %}
+      <div class="meta-pill" id="practiceDatePill" data-start="{{ event.start_at|date:"c" }}"></div>
+      <div class="meta-pill" id="practiceTimePill" data-start="{{ event.start_at|date:"c" }}" data-end="{{ event.end_at|date:"c" }}"></div>
       <div class="meta-pill">{{ event.participants|default:"No students yet" }}</div>
     </div>
   </div>
@@ -298,6 +341,7 @@ body {
     {% csrf_token %}
     <input type="hidden" name="words_json" id="wordsJson">
     <input type="hidden" name="cards_json" id="cardsJson">
+    <input type="hidden" name="fill_blanks_json" id="fillBlanksJson">
 
     <div class="layout">
       <section class="panel mobile-active" data-mobile-panel="words">
@@ -384,41 +428,26 @@ body {
       <div class="panel-head">
         <div>
           <h2>Fill in the blanks</h2>
-          <span>Sentences are built from your saved words. Save practice after editing the vocabulary to refresh this task.</span>
+          <span>Choose the words you want to practice in sentences and edit the text before saving.</span>
         </div>
       </div>
       <div class="panel-body">
-        {% if fill_blanks_word_bank %}
-        <div class="word-bank">
-          {% for word in fill_blanks_word_bank %}
-          <div class="word-chip">{{ word }}</div>
-          {% endfor %}
-        </div>
-        {% endif %}
-
-        {% if fill_blanks_items %}
-        <div class="exercise-list" id="fillBlanksList">
-          {% for item in fill_blanks_items %}
-          <div class="exercise-item">
-            <div class="exercise-sentence">{{ item.sentence }}</div>
-            <div class="exercise-meta">
-              <input class="exercise-input" type="text" autocomplete="off" data-answer="{{ item.answer|lower }}" placeholder="Type the missing word">
-              
+        <div class="sentence-builder">
+          <div class="sentence-builder-head">
+            <div class="sentence-builder-copy">
+              Add your vocabulary first. Then tap the words that should appear in the sentence task. You can leave a sentence empty and the AI will generate it on save, or write your own text right away.
             </div>
+            <div class="word-bank" id="fillBlanksWordPicker"></div>
           </div>
-          {% endfor %}
+          <div class="sentence-editor-list" id="fillBlanksEditor"></div>
+          <div class="empty" id="fillBlanksWordsEmpty" hidden>Add at least one word on the left to build this task.</div>
+          <div class="empty" id="fillBlanksSelectionEmpty" hidden>Select the words that should have sentence practice.</div>
         </div>
-        <div class="exercise-actions">
-          <button class="exercise-btn" type="button" id="checkAnswersBtn">Check answers</button>
-          <button class="exercise-btn" type="button" id="resetAnswersBtn">Reset</button>
-        </div>
-        <div class="exercise-feedback" id="exerciseFeedback"></div>
-        {% else %}
-        <div class="empty">Save a few words first and the sentence exercise will appear here.</div>
-        {% endif %}
       </div>
     </section>
   </form>
+
+  {{ fill_blanks_items|json_script:"fillBlanksInitialData" }}
   {% else %}
   <div class="layout">
     <section class="panel mobile-active" data-mobile-panel="words">
@@ -501,10 +530,7 @@ body {
         {% for item in fill_blanks_items %}
         <div class="exercise-item">
           <div class="exercise-sentence">{{ item.sentence }}</div>
-          <div class="exercise-meta">
-            <input class="exercise-input" type="text" autocomplete="off" data-answer="{{ item.answer|lower }}" placeholder="Type the missing word">
-            
-          </div>
+          <input class="exercise-input" type="text" autocomplete="off" data-answer="{{ item.answer|lower }}" placeholder="Type the missing word">
         </div>
         {% endfor %}
       </div>
@@ -571,6 +597,30 @@ function normalizeAnswer(value) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+function formatPracticeDateTime() {
+  const datePill = document.getElementById('practiceDatePill');
+  const timePill = document.getElementById('practiceTimePill');
+  if (!datePill || !timePill) return;
+
+  const start = new Date(datePill.dataset.start || timePill.dataset.start || '');
+  const end = new Date(timePill.dataset.end || '');
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+
+  const dateFormatter = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+  const timeFormatter = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  datePill.textContent = dateFormatter.format(start);
+  timePill.textContent = `${timeFormatter.format(start).toLowerCase()} - ${timeFormatter.format(end).toLowerCase()}`;
+}
+
 function filterWordCollection(containerSelector, query) {
   const container = document.querySelector(containerSelector);
   if (!container) return;
@@ -593,6 +643,7 @@ function bindWordSearch() {
     });
   }
 }
+
 function bindExerciseActions() {
   if (!fillBlanksList) return;
 
@@ -633,15 +684,153 @@ function bindExerciseActions() {
 }
 
 {% if can_edit_practice %}
+const fillBlanksJson = document.getElementById('fillBlanksJson');
+const fillBlanksWordPicker = document.getElementById('fillBlanksWordPicker');
+const fillBlanksEditor = document.getElementById('fillBlanksEditor');
+const fillBlanksWordsEmpty = document.getElementById('fillBlanksWordsEmpty');
+const fillBlanksSelectionEmpty = document.getElementById('fillBlanksSelectionEmpty');
+let fillBlanksDraft = [];
+
+try {
+  fillBlanksDraft = JSON.parse(document.getElementById('fillBlanksInitialData')?.textContent || '[]')
+    .map(item => ({
+      answer: String(item.answer || '').trim(),
+      sentence: String(item.sentence || '').trim(),
+      selected: Boolean(item.selected),
+    }))
+    .filter(item => item.answer);
+} catch (error) {
+  fillBlanksDraft = [];
+}
+
+function normalizeTerm(value) {
+  return value.trim().toLowerCase();
+}
+
+function collectItems(selector, fields) {
+  return Array.from(document.querySelectorAll(selector)).map(item => {
+    const payload = {};
+    fields.forEach(field => {
+      const input = item.querySelector(`[data-field="${field}"]`);
+      payload[field] = input ? input.value.trim() : '';
+    });
+    return payload;
+  }).filter(item => Object.values(item).some(Boolean));
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getCurrentWordTerms() {
+  const seen = new Set();
+  return Array.from(document.querySelectorAll('[data-word-item] [data-field="term"]'))
+    .map(field => field.value.trim())
+    .filter(term => {
+      if (!term) return false;
+      const key = normalizeTerm(term);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function syncFillBlanksDraftWithWords() {
+  const currentTerms = getCurrentWordTerms();
+  const nextDraft = [];
+
+  currentTerms.forEach(term => {
+    const existing = fillBlanksDraft.find(item => normalizeTerm(item.answer) === normalizeTerm(term));
+    nextDraft.push(existing ? { ...existing, answer: term } : { answer: term, sentence: '', selected: false });
+  });
+
+  fillBlanksDraft = nextDraft;
+}
+
+function updateFillBlanksPayload() {
+  if (!fillBlanksJson) return;
+  fillBlanksJson.value = JSON.stringify(
+    fillBlanksDraft.map(item => ({
+      answer: item.answer,
+      sentence: item.sentence.trim(),
+      selected: item.selected,
+    }))
+  );
+}
+
+function toggleFillBlankSelection(term) {
+  fillBlanksDraft = fillBlanksDraft.map(item => (
+    normalizeTerm(item.answer) === normalizeTerm(term)
+      ? { ...item, selected: !item.selected }
+      : item
+  ));
+  renderFillBlanksBuilder();
+}
+
+function renderFillBlanksBuilder() {
+  if (!fillBlanksWordPicker || !fillBlanksEditor) return;
+
+  syncFillBlanksDraftWithWords();
+  updateFillBlanksPayload();
+
+  const currentTerms = fillBlanksDraft.map(item => item.answer);
+  const selectedItems = fillBlanksDraft.filter(item => item.selected);
+
+  fillBlanksWordPicker.innerHTML = currentTerms.map(term => {
+    const isActive = selectedItems.some(item => normalizeTerm(item.answer) === normalizeTerm(term));
+    return `<button class="word-chip word-chip-toggle ${isActive ? 'active' : ''}" type="button" data-fill-term="${escapeHtml(term)}">${escapeHtml(term)}</button>`;
+  }).join('');
+
+  fillBlanksEditor.innerHTML = selectedItems.map(item => `
+    <div class="exercise-item sentence-editor-item">
+      <div class="sentence-editor-head">
+        <div class="sentence-editor-term">${escapeHtml(item.answer)}</div>
+        <div class="sentence-editor-help">Leave the box empty if you want the AI to generate a sentence on save.</div>
+      </div>
+      <textarea class="textarea" data-fill-sentence="${escapeHtml(item.answer)}" placeholder="Example: I ____ every morning."></textarea>
+    </div>
+  `).join('');
+
+  fillBlanksWordsEmpty.hidden = currentTerms.length > 0;
+  fillBlanksSelectionEmpty.hidden = currentTerms.length === 0 || selectedItems.length > 0;
+
+  fillBlanksWordPicker.querySelectorAll('[data-fill-term]').forEach(button => {
+    button.addEventListener('click', () => {
+      toggleFillBlankSelection(button.dataset.fillTerm || '');
+    });
+  });
+
+  fillBlanksEditor.querySelectorAll('[data-fill-sentence]').forEach(field => {
+    const answer = field.dataset.fillSentence || '';
+    const existing = selectedItems.find(item => normalizeTerm(item.answer) === normalizeTerm(answer));
+    field.value = existing ? existing.sentence : '';
+    field.addEventListener('input', () => {
+      fillBlanksDraft = fillBlanksDraft.map(item => (
+        normalizeTerm(item.answer) === normalizeTerm(answer)
+          ? { ...item, sentence: field.value }
+          : item
+      ));
+      updateFillBlanksPayload();
+    });
+  });
+}
+
 function bindEditorActions() {
   document.querySelectorAll('[data-remove-word]').forEach(button => {
     button.onclick = () => {
       const items = document.querySelectorAll('[data-word-item]');
       if (items.length === 1) {
         items[0].querySelectorAll('input, textarea').forEach(field => field.value = '');
+        renderFillBlanksBuilder();
         return;
       }
       button.closest('[data-word-item]').remove();
+      renderFillBlanksBuilder();
     };
   });
 
@@ -661,26 +850,10 @@ function bindEditorActions() {
   document.querySelectorAll('[data-card-item] textarea').forEach(field => {
     field.oninput = () => renderCardsPreview();
   });
-}
 
-function collectItems(selector, fields) {
-  return Array.from(document.querySelectorAll(selector)).map(item => {
-    const payload = {};
-    fields.forEach(field => {
-      payload[field] = item.querySelector(`[data-field="${field}"]`).value.trim();
-    });
-    return payload;
-  }).filter(item => Object.values(item).some(Boolean));
-}
-
-function escapeHtml(value) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/\n/g, '<br>');
+  document.querySelectorAll('[data-word-item] [data-field="term"]').forEach(field => {
+    field.oninput = () => renderFillBlanksBuilder();
+  });
 }
 
 function renderCardsPreview() {
@@ -722,6 +895,7 @@ document.getElementById('addWordBtn').addEventListener('click', () => {
   const wordsEditor = document.getElementById('wordsEditor');
   wordsEditor.prepend(newItem);
   bindEditorActions();
+  renderFillBlanksBuilder();
   const termInput = newItem.querySelector('[data-field="term"]');
   if (termInput) {
     termInput.focus();
@@ -739,19 +913,17 @@ document.getElementById('addCardBtn').addEventListener('click', () => {
 document.getElementById('practiceForm').addEventListener('submit', () => {
   document.getElementById('wordsJson').value = JSON.stringify(collectItems('[data-word-item]', ['term', 'translation', 'note']));
   document.getElementById('cardsJson').value = JSON.stringify(collectItems('[data-card-item]', ['front_text', 'back_text']));
+  updateFillBlanksPayload();
 });
 
 bindEditorActions();
 renderCardsPreview();
+renderFillBlanksBuilder();
 {% endif %}
 
+formatPracticeDateTime();
 bindWordSearch();
 bindExerciseActions();
 </script>
 </body>
 </html>
-
-
-
-
-
